@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>СБЭУ Кликер</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Левая панель -->
+        <div class="side-panel left-panel"><img src="images/left-placeholder.png" alt="Левый декор"></div>
+        
+        <!-- Центральная игровая зона -->
+        <div id="game-wrapper">
+            <div id="game-background"></div>
+            <div id="game">
+                <div id="header">
+                    <div id="header-info">
+                        <p>Командир: <span id="user-name" title="Что вы здесь ищете?">Пользователь</span></p>
+                        <p>Ресурсы: <span id="score">0</span></p>
+                        <p id="shevrons-display">Шевроны: <span id="shevrons">0</span></p>
+                        <p>(<span id="auto-click-power">0</span>/сек) <span id="boost-indicator"></span></p>
+                    </div>
+                    <div id="sound-toggle">
+                        <img src="images/icons/sound_on.png" alt="Toggle Sound">
+                    </div>
+                </div>
+                <div id="clicker-zone">
+                    <img src="images/click-meme.png" alt="Кликай сюда!" id="click-button">
+                    <div id="click-feedback-container"></div>
+                </div>
+                <button id="open-panel-button" class="panel-toggle-button">Командный Центр</button>
+            </div>
+        </div>
+
+        <!-- Правая панель -->
+        <div class="side-panel right-panel"><img src="images/right-placeholder.png" alt="Правый декор"></div>
+    </div>
+
+    <!-- Контейнеры -->
+    <div id="bonus-container"></div>
+    <div id="toast-container"></div>
+
+    <!-- Выдвижная панель -->
+    <div id="bottom-panel">
+        <button id="close-panel-button" class="panel-toggle-button">Закрыть</button>
+        <nav id="panel-tabs">
+            <button class="tab-button active" data-tab="upgrades">Улучшения</button>
+            <button class="tab-button" data-tab="quests">Задания</button>
+            <button class="tab-button" data-tab="achievements">Достижения</button>
+            <button class="tab-button" data-tab="shtab">Штаб</button>
+            <button class="tab-button" data-tab="missions">Спецоперации</button>
+            <button class="tab-button" data-tab="prestige">Перерождение</button>
+        </nav>
+        <div id="panel-content">
+            <div id="upgrades-content" class="tab-content active"></div>
+            <div id="quests-content" class="tab-content"></div>
+            <div id="achievements-content" class="tab-content"></div>
+            <div id="shtab-content" class="tab-content"></div>
+            <div id="missions-content" class="tab-content"></div>
+            <div id="prestige-content" class="tab-content"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
