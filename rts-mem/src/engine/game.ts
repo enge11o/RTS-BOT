@@ -39,6 +39,8 @@ export class Game {
     this.buildPlacer = null;
   }
 
+  getWorldState() { return this.world.getState(); }
+
   private bindInput() {
     this.canvas.addEventListener("mousemove", (e) => {
       const rect = this.canvas.getBoundingClientRect();

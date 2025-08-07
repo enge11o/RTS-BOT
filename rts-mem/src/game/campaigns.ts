@@ -42,10 +42,9 @@ export const campaigns: Record<string, Campaign> = {
         name: "Инструктаж зверинца",
         faction: "SBEU",
         setup: (w) => {
-          w.playerFaction = "SBEU";
+          w.missionName = "Инструктаж зверинца"; w.playerFaction = "SBEU";
           w.spawnDemo();
           w.objectiveText = "Выделяйте юнитов и отдавайте приказы. Постройте пару бойцов";
-          w.onUpdateExtra = (world, dt) => {};
           w.winCondition = (world) => world.entities.filter(e => e.faction === "SBEU" && e.type === "unit").length >= 10;
         },
       },
@@ -54,7 +53,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Отбить ресурсные точки",
         faction: "SBEU",
         setup: (w) => {
-          w.playerFaction = "SBEU";
+          w.missionName = "Отбить ресурсные точки"; w.playerFaction = "SBEU";
           w.spawnDemo();
           for (const r of w.entities.filter(e => e.type === "resource")) {
             spawnWave(w, "PMС", { x: r.pos.x + 6, y: r.pos.y + 6 }, [{ unitId: "pmc-typok", count: 3 }]);
@@ -68,7 +67,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Штурм укрепточки",
         faction: "SBEU",
         setup: (w) => {
-          w.playerFaction = "SBEU";
+          w.missionName = "Штурм укрепточки"; w.playerFaction = "SBEU";
           w.spawnDemo();
           spawnWave(w, "PMС", { x: 92, y: 86 }, [{ unitId: "pmc-silach", count: 3 }, { unitId: "pmc-sniper", count: 2 }]);
           destroyAllEnemiesWin(w, "SBEU");
@@ -79,7 +78,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Накопить на штурм",
         faction: "SBEU",
         setup: (w) => {
-          w.playerFaction = "SBEU";
+          w.missionName = "Накопить на штурм"; w.playerFaction = "SBEU";
           w.spawnDemo();
           gatherResources(w, 1000, 300);
           let t = 0; w.onUpdateExtra = (world, dt) => { t += dt; if (t > 20) { t = 0; spawnWave(world, "PMС", { x: 88, y: 92 }, [{ unitId: "pmc-typok", count: 4 }, { unitId: "pmc-grenade", count: 1 }]); } };
@@ -90,7 +89,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Штурм водоочистной",
         faction: "SBEU",
         setup: (w) => {
-          w.playerFaction = "SBEU";
+          w.missionName = "Штурм водоочистной"; w.playerFaction = "SBEU";
           w.spawnDemo();
           spawnWave(w, "PMС", { x: 94, y: 84 }, [{ unitId: "pmc-silach", count: 4 }, { unitId: "pmc-sniper", count: 2 }, { unitId: "pmc-tank", count: 1 }]);
           destroyAllEnemiesWin(w, "SBEU");
@@ -107,7 +106,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Прибытие Зубешко",
         faction: "PMС",
         setup: (w) => {
-          w.playerFaction = "PMС";
+          w.missionName = "Прибытие Зубешко"; w.playerFaction = "PMС";
           w.spawnDemo();
           w.objectiveText = "Инструктаж по механикам ЧВК";
           w.winCondition = (world) => world.entities.filter(e => e.faction === "PMС" && e.type === "unit").length >= 8;
@@ -118,7 +117,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Оборона укрепления A",
         faction: "PMС",
         setup: (w) => {
-          w.playerFaction = "PMС";
+          w.missionName = "Оборона укрепления A"; w.playerFaction = "PMС";
           w.spawnDemo();
           surviveForMinutes(w, 3);
           let t = 0; w.onUpdateExtra = (world, dt) => { t += dt; if (t > 15) { t = 0; spawnWave(world, "SBEU", { x: 60, y: 30 }, [{ unitId: "sbeu-worm", count: 6 }, { unitId: "sbeu-caterpillar", count: 2 }]); } };
@@ -129,7 +128,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Оборона укрепления B",
         faction: "PMС",
         setup: (w) => {
-          w.playerFaction = "PMС";
+          w.missionName = "Оборона укрепления B"; w.playerFaction = "PMС";
           w.spawnDemo();
           surviveForMinutes(w, 4);
           let t = 0; w.onUpdateExtra = (world, dt) => { t += dt; if (t > 18) { t = 0; spawnWave(world, "SBEU", { x: 66, y: 52 }, [{ unitId: "sbeu-cockroach", count: 3 }, { unitId: "sbeu-cicada", count: 2 }]); } };
@@ -140,7 +139,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Предательство Пуссильченко",
         faction: "PMС",
         setup: (w) => {
-          w.playerFaction = "PMС";
+          w.missionName = "Предательство Пуссильченко"; w.playerFaction = "PMС";
           w.spawnDemo();
           surviveForMinutes(w, 5);
           let t = 0; w.onUpdateExtra = (world, dt) => { t += dt; if (t > 20) { t = 0; spawnWave(world, "SBEU", { x: 70, y: 46 }, [{ unitId: "sbeu-worm", count: 6 }, { unitId: "sbeu-cockroach", count: 4 }, { unitId: "sbeu-turtle", count: 1 }]); } };
@@ -151,7 +150,7 @@ export const campaigns: Record<string, Campaign> = {
         name: "Контрнаступление",
         faction: "PMС",
         setup: (w) => {
-          w.playerFaction = "PMС";
+          w.missionName = "Контрнаступление"; w.playerFaction = "PMС";
           w.spawnDemo();
           destroyAllEnemiesWin(w, "PMС");
         },
@@ -164,7 +163,7 @@ export function createMissionWorld(campaignId: keyof typeof campaigns, missionIn
   const c = campaigns[campaignId];
   const m = c.missions[missionIndex];
   const w = new World(128, 128);
-  w.playerFaction = m.faction;
+  w.playerFaction = m.faction; w.missionName = m.name;
   m.setup(w);
   return w;
 }

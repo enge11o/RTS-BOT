@@ -18,14 +18,48 @@ window.addEventListener("resize", fitCanvasToWindow);
 
 const game = new Game(canvas, ctx);
 
-// Campaign state
+// Screens
+const mainMenu = document.getElementById("mainMenu")!;
+const missionMenu = document.getElementById("missionMenu")!;
+const resultMenu = document.getElementById("resultMenu")!;
+const missionCampaignTitle = document.getElementById("missionCampaignTitle")!;
+const missionButtons = document.getElementById("missionButtons")!;
+
 let currentCampaign: keyof typeof campaigns = "SBEU";
 let currentMissionIndex = 0;
 
-function loadMission() {
-  game.loadWorld(createMissionWorld(currentCampaign, currentMissionIndex));
+function show(el: HTMLElement) { el.style.display = "flex"; }
+function hide(el: HTMLElement) { el.style.display = "none"; }
+
+function goMainMenu() {
+  show(mainMenu); hide(missionMenu); hide(resultMenu);
 }
-loadMission();
+function goMissionMenu(campId: keyof typeof campaigns) {
+  currentCampaign = campId; missionCampaignTitle.textContent = campaigns[campId].name;
+  missionButtons.innerHTML = "";
+  campaigns[campId].missions.forEach((m, i) => {
+    const b = document.createElement("div"); b.className = "btn"; b.textContent = `${i + 1}. ${m.name}`; b.onclick = () => startMission(campId, i);
+    missionButtons.appendChild(b);
+  });
+  hide(mainMenu); show(missionMenu); hide(resultMenu);
+}
+function startMission(campId: keyof typeof campaigns, idx: number) {
+  currentCampaign = campId; currentMissionIndex = idx;
+  game.loadWorld(createMissionWorld(campId, idx));
+  hide(mainMenu); hide(missionMenu); hide(resultMenu);
+}
+function restartMission() { startMission(currentCampaign, currentMissionIndex); }
+
+// Bind main menu
+(document.getElementById("btnPlaySBEU") as HTMLDivElement).onclick = () => goMissionMenu("SBEU");
+(document.getElementById("btnPlayPMC") as HTMLDivElement).onclick = () => goMissionMenu("PMC");
+(document.getElementById("btnSandbox") as HTMLDivElement).onclick = () => { startMission("SBEU", 0); };
+(document.getElementById("btnBackToMain") as HTMLDivElement).onclick = () => goMainMenu();
+(document.getElementById("btnRestart") as HTMLDivElement).onclick = () => restartMission();
+(document.getElementById("btnMissionSelect") as HTMLDivElement).onclick = () => goMissionMenu(currentCampaign);
+(document.getElementById("btnMainMenu") as HTMLDivElement).onclick = () => goMainMenu();
+
+goMainMenu();
 
 let last = performance.now();
 function frame(now: number) {
@@ -33,11 +67,19 @@ function frame(now: number) {
   last = now;
   game.update(dt);
   game.render();
+
+  // Check result
+  const state = (game as any).getWorldState ? (game as any).getWorldState() : (game as any).world?.getState?.();
+  if (state === "victory" || state === "defeat") {
+    const title = document.getElementById("resultTitle")!;
+    title.textContent = state === "victory" ? "Победа!" : "Поражение";
+    show(resultMenu);
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// Bind HUD
+// HUD
 const rublesEl = document.getElementById("rubles")!;
 const dollarsEl = document.getElementById("dollars")!;
 const supplyEl = document.getElementById("supply")!;
@@ -54,10 +96,7 @@ function syncUI() {
   inspectorEl.textContent = s.inspector + (s.objective ? ` | Цель: ${s.objective}` : "");
 
   actionsEl.innerHTML = "";
-  // Mission control buttons
-  addBtn(`Кампания: ${currentCampaign}`, () => { currentCampaign = currentCampaign === "SBEU" ? "PMC" : "SBEU"; currentMissionIndex = 0; loadMission(); });
-  addBtn(`Миссия ${currentMissionIndex + 1}/5`, () => { currentMissionIndex = (currentMissionIndex + 1) % 5; loadMission(); });
-
+  // Mission control buttons are moved to menus
   for (const action of s.actions) {
     const btn = document.createElement("div");
     btn.className = "btn";
@@ -66,13 +105,4 @@ function syncUI() {
     actionsEl.appendChild(btn);
   }
 }
-
-function addBtn(label: string, onClick: () => void) {
-  const btn = document.createElement("div");
-  btn.className = "btn";
-  btn.textContent = label;
-  btn.onclick = onClick;
-  actionsEl.appendChild(btn);
-}
-
 setInterval(syncUI, 120);

@@ -14,6 +14,11 @@
     .btn { background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 8px; text-align: center; cursor: pointer; user-select: none; }
     .btn:hover { background: #0f172a; }
     canvas { display: block; width: 100vw; height: 100vh; }
+
+    .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); pointer-events: auto; }
+    .panel { background: #0b1220; border: 1px solid #1f2937; border-radius: 12px; padding: 24px; min-width: 420px; }
+    .title { font-size: 22px; font-weight: 800; margin-bottom: 12px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -28,6 +33,38 @@
       </div>
       <div id="actions"></div>
       <div id="inspector" class="pill">—</div>
+    </div>
+
+    <div id="mainMenu" class="overlay" style="display:flex">
+      <div class="panel">
+        <div class="title">RTS MEM — Главное меню</div>
+        <div class="row" style="margin-bottom:12px">
+          <div class="btn" id="btnPlaySBEU">Кампания СБЭУ</div>
+          <div class="btn" id="btnPlayPMC">Кампания ЧВК</div>
+        </div>
+        <div class="row">
+          <div class="btn" id="btnSandbox">Песочница</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionMenu" class="overlay">
+      <div class="panel">
+        <div class="title">Выбор миссии: <span id="missionCampaignTitle"></span></div>
+        <div id="missionButtons" class="row"></div>
+        <div style="margin-top:12px" class="row"><div class="btn" id="btnBackToMain">Назад</div></div>
+      </div>
+    </div>
+
+    <div id="resultMenu" class="overlay">
+      <div class="panel">
+        <div class="title" id="resultTitle">—</div>
+        <div class="row" style="margin-top:12px">
+          <div class="btn" id="btnRestart">Заново</div>
+          <div class="btn" id="btnMissionSelect">Выбор миссии</div>
+          <div class="btn" id="btnMainMenu">Главное меню</div>
+        </div>
+      </div>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

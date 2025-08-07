@@ -62,10 +62,12 @@ export class World {
   time = 0;
   playerFaction: Faction = "SBEU";
 
+  missionName: string = "";
   objectiveText: string = "Песочница";
   onUpdateExtra?: (w: World, dt: number) => void;
   winCondition?: (w: World) => boolean;
   loseCondition?: (w: World) => boolean;
+  state: "running" | "victory" | "defeat" = "running";
 
   catalog: Record<string, Trainable> = {
     // SBEU
@@ -363,6 +365,7 @@ export class World {
   }
 
   update(dt: number) {
+    if (this.state !== "running") return; // freeze world when finished
     this.time += dt;
 
     // Separation
@@ -443,7 +446,14 @@ export class World {
     this.harvestAndIncome(dt);
 
     if (this.onUpdateExtra) this.onUpdateExtra(this, dt);
+
+    // Win/Lose checks
+    if (this.winCondition && this.winCondition(this)) this.state = "victory";
+    const defaultLose = () => this.entities.every(e => e.faction !== this.playerFaction || (e.type !== "unit" && e.type !== "building"));
+    if ((this.loseCondition && this.loseCondition(this)) || defaultLose()) this.state = "defeat";
   }
+
+  getState() { return this.state; }
 
   render(ctx: CanvasRenderingContext2D) {
     ctx.save();
