@@ -7,7 +7,7 @@
   <style>
     html, body { height: 100%; margin: 0; background: #0b0e12; color: #e8eaed; }
     #ui { position: fixed; inset: 0; pointer-events: none; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    #hud { position: absolute; bottom: 0; left: 0; right: 0; height: 160px; background: rgba(20,26,32,0.9); border-top: 1px solid #1f2937; pointer-events: auto; display: grid; grid-template-columns: 320px 1fr 360px; gap: 8px; padding: 8px; }
+    #hud { position: absolute; bottom: 0; left: 0; right: 0; height: 160px; background: rgba(20,26,32,0.9); border-top: 1px solid #1f2937; pointer-events: auto; display: grid; grid-template-columns: 360px 1fr 360px; gap: 8px; padding: 8px; }
     #resources { display: flex; gap: 16px; align-items: center; padding: 8px; }
     .pill { background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 6px 10px; font-weight: 600; }
     #actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -15,7 +15,7 @@
     .btn:hover { background: #0f172a; }
     canvas { display: block; width: 100vw; height: 100vh; }
   </style>
-  <script type="module" crossorigin src="/assets/index-DuQMRpyn.js"></script>
+  <script type="module" crossorigin src="/assets/index-DuyM7pN5.js"></script>
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -24,6 +24,7 @@
       <div id="resources">
         <div class="pill">₽: <span id="rubles">0</span></div>
         <div class="pill">$: <span id="dollars">0</span></div>
+        <div class="pill">Снабжение: <span id="supply">0/0</span></div>
         <div class="pill">Выбранно: <span id="selected">0</span></div>
       </div>
       <div id="actions"></div>

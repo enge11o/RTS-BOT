@@ -40,6 +40,7 @@ requestAnimationFrame(frame);
 // Bind HUD
 const rublesEl = document.getElementById("rubles")!;
 const dollarsEl = document.getElementById("dollars")!;
+const supplyEl = document.getElementById("supply")!;
 const selectedEl = document.getElementById("selected")!;
 const inspectorEl = document.getElementById("inspector")!;
 const actionsEl = document.getElementById("actions")!;
@@ -48,6 +49,7 @@ function syncUI() {
   const s = game.getUIState();
   rublesEl.textContent = String(s.rubles);
   dollarsEl.textContent = String(s.dollars);
+  supplyEl.textContent = s.supply ?? "0/0";
   selectedEl.textContent = String(s.selectedCount);
   inspectorEl.textContent = s.inspector + (s.objective ? ` | Цель: ${s.objective}` : "");
 
