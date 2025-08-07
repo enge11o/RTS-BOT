@@ -21,6 +21,7 @@ export class Game {
   private selectedIds = new Set<number>();
   private pendingAbility: { casterId: number; kind: "stunGrenade" | "aimedShot" | "throwGrenade" } | null = null;
   private buildPlacer: { typeId: string } | null = null;
+  private groups: Record<number, number[]> = {};
 
   constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     this.canvas = canvas;
@@ -83,6 +84,31 @@ export class Game {
       if (e.key === "ArrowDown" || e.key === "s") this.camera.y += speed;
       if (e.key === "ArrowLeft" || e.key === "a") this.camera.x -= speed;
       if (e.key === "ArrowRight" || e.key === "d") this.camera.x += speed;
+
+      // Groups: Ctrl+1..9 assign; 1..9 select
+      const digit = parseInt(e.key, 10);
+      if (!isNaN(digit) && digit >= 1 && digit <= 9) {
+        if (e.ctrlKey || e.metaKey) {
+          this.groups[digit] = [...this.selectedIds];
+        } else {
+          const ids = this.groups[digit] || [];
+          this.selectedIds = new Set(ids);
+        }
+      }
+
+      // Ability hotkeys
+      if (e.key.toLowerCase() === "q" || e.key.toLowerCase() === "w" || e.key.toLowerCase() === "e") {
+        const sel = [...this.selectedIds].map(id => this.world.getEntityById(id)).find(u => u?.type === "unit" && u.abilities);
+        if (sel && sel?.abilities) {
+          if (e.key.toLowerCase() === "q" && sel.abilities.stunGrenade) this.pendingAbility = { casterId: sel.id, kind: "stunGrenade" };
+          if (e.key.toLowerCase() === "w" && sel.abilities.aimedShot) this.pendingAbility = { casterId: sel.id, kind: "aimedShot" };
+          if (e.key.toLowerCase() === "e" && sel.abilities.throwGrenade) this.pendingAbility = { casterId: sel.id, kind: "throwGrenade" };
+        }
+      }
+
+      // Build hotkeys
+      if (e.key.toLowerCase() === "b") { this.buildPlacer = { typeId: "stash" }; }
+      if (e.key.toLowerCase() === "c") { this.buildPlacer = { typeId: "pmc-supply" }; }
     });
 
     this.canvas.addEventListener("wheel", (e) => {
@@ -95,25 +121,18 @@ export class Game {
     }, { passive: true });
   }
 
-  private screenToWorld(x: number, y: number): Vec2 {
-    return { x: (x / this.camera.zoom) + this.camera.x, y: (y / this.camera.zoom) + this.camera.y };
-  }
+  private screenToWorld(x: number, y: number): Vec2 { return { x: (x / this.camera.zoom) + this.camera.x, y: (y / this.camera.zoom) + this.camera.y }; }
 
   private commitSelection() {
     if (!this.selectionStart) {
       const hit = this.world.pickEntity(this.mouse.worldX, this.mouse.worldY);
-      this.selectedIds.clear();
-      if (hit) this.selectedIds.add(hit.id);
-      return;
+      this.selectedIds.clear(); if (hit) this.selectedIds.add(hit.id); return;
     }
     const rect: Rect = Rect.fromPoints(this.selectionStart, { x: this.mouse.worldX, y: this.mouse.worldY });
-    const ids = this.world.queryEntities(rect);
-    this.selectedIds = new Set(ids);
+    const ids = this.world.queryEntities(rect); this.selectedIds = new Set(ids);
   }
 
-  update(dt: number) {
-    this.world.update(dt);
-  }
+  update(dt: number) { this.world.update(dt); }
 
   render() {
     const { ctx } = this;
@@ -132,21 +151,10 @@ export class Game {
       ctx.strokeStyle = "#60a5fa"; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
     }
 
-    if (this.pendingAbility) {
-      ctx.strokeStyle = "#f59e0b"; ctx.beginPath(); ctx.arc(this.mouse.worldX, this.mouse.worldY, 3, 0, Math.PI * 2); ctx.stroke();
-    }
-    if (this.buildPlacer) {
-      const t = this.buildPlacer.typeId;
-      const ok = this.world.canPlaceBuilding(t, { x: this.mouse.worldX, y: this.mouse.worldY });
-      ctx.strokeStyle = ok ? "#22c55e" : "#ef4444"; ctx.lineWidth = 2;
-      const r = this.world.buildingCatalog[t].radius;
-      ctx.strokeRect(this.mouse.worldX - r, this.mouse.worldY - r, r * 2, r * 2);
-    }
+    if (this.pendingAbility) { ctx.strokeStyle = "#f59e0b"; ctx.beginPath(); ctx.arc(this.mouse.worldX, this.mouse.worldY, 3, 0, Math.PI * 2); ctx.stroke(); }
+    if (this.buildPlacer) { const t = this.buildPlacer.typeId; const ok = this.world.canPlaceBuilding(t, { x: this.mouse.worldX, y: this.mouse.worldY }); ctx.strokeStyle = ok ? "#22c55e" : "#ef4444"; ctx.lineWidth = 2; const r = this.world.buildingCatalog[t].radius; ctx.strokeRect(this.mouse.worldX - r, this.mouse.worldY - r, r * 2, r * 2); }
 
-    for (const id of this.selectedIds) {
-      const e = this.world.getEntityById(id); if (!e) continue;
-      ctx.strokeStyle = "#34d399"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, e.radius + 2, 0, Math.PI * 2); ctx.stroke();
-    }
+    for (const id of this.selectedIds) { const e = this.world.getEntityById(id); if (!e) continue; ctx.strokeStyle = "#34d399"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, e.radius + 2, 0, Math.PI * 2); ctx.stroke(); }
 
     ctx.restore();
   }
@@ -159,35 +167,26 @@ export class Game {
     const actions: ActionDef[] = [];
     if (selected.length === 1 && selected[0]!.type === "building") {
       const b = selected[0]!;
-      for (const train of this.world.getTrainableUnits(b.faction, b.tier)) {
-        actions.push({ id: `train:${train.id}`, label: `Нанять ${train.label}`, costRubles: train.costRubles, costDollars: train.costDollars, onClick: () => this.world.queueTrain(b.id, train.id) });
-      }
-      // Allow placing stash from any player building
+      for (const train of this.world.getTrainableUnits(b.faction, b.tier)) actions.push({ id: `train:${train.id}`, label: `Нанять ${train.label}`, costRubles: train.costRubles, costDollars: train.costDollars, onClick: () => this.world.queueTrain(b.id, train.id) });
       if (b.faction === this.world.playerFaction) {
-        const bt = this.world.buildingCatalog["stash"]; actions.push({ id: "build:stash", label: `Построить ${bt.label}`, costRubles: bt.costRubles, costDollars: bt.costDollars, onClick: () => { this.buildPlacer = { typeId: "stash" }; } });
+        const bt = this.world.buildingCatalog["stash"]; actions.push({ id: "build:stash", label: `Построить ${bt.label} (B)`, costRubles: bt.costRubles, costDollars: bt.costDollars, onClick: () => { this.buildPlacer = { typeId: "stash" }; } });
+        const sc = this.world.buildingCatalog["pmc-supply"]; actions.push({ id: "build:pmc", label: `Построить ${sc.label} (C)`, costRubles: sc.costRubles, costDollars: sc.costDollars, onClick: () => { this.buildPlacer = { typeId: "pmc-supply" }; } });
       }
     }
 
     if (selected.length === 1 && selected[0]!.type === "unit") {
       const u = selected[0]!;
       if (u.faction === this.world.playerFaction) {
-        const bt = this.world.buildingCatalog["stash"]; actions.push({ id: "build:stash", label: `Построить ${bt.label}`, costRubles: bt.costRubles, costDollars: bt.costDollars, onClick: () => { this.buildPlacer = { typeId: "stash" }; } });
+        const bt = this.world.buildingCatalog["stash"]; actions.push({ id: "build:stash", label: `Построить ${bt.label} (B)`, costRubles: bt.costRubles, costDollars: bt.costDollars, onClick: () => { this.buildPlacer = { typeId: "stash" }; } });
+        const sc = this.world.buildingCatalog["pmc-supply"]; actions.push({ id: "build:pmc", label: `Построить ${sc.label} (C)`, costRubles: sc.costRubles, costDollars: sc.costDollars, onClick: () => { this.buildPlacer = { typeId: "pmc-supply" }; } });
       }
       if (u.abilities) {
-        if (u.abilities.stunGrenade) actions.push({ id: `ab:stun:${u.id}`, label: "Оглушающая граната", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "stunGrenade" }; } });
-        if (u.abilities.aimedShot) actions.push({ id: `ab:aim:${u.id}`, label: "Прицельный выстрел", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "aimedShot" }; } });
-        if (u.abilities.throwGrenade) actions.push({ id: `ab:nade:${u.id}`, label: "Кинуть гранату", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "throwGrenade" }; } });
+        if (u.abilities.stunGrenade) actions.push({ id: `ab:stun:${u.id}`, label: "Оглушающая граната (Q)", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "stunGrenade" }; } });
+        if (u.abilities.aimedShot) actions.push({ id: `ab:aim:${u.id}`, label: "Прицельный выстрел (W)", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "aimedShot" }; } });
+        if (u.abilities.throwGrenade) actions.push({ id: `ab:nade:${u.id}`, label: "Кинуть гранату (E)", costRubles: 0, costDollars: 0, onClick: () => { this.pendingAbility = { casterId: u.id, kind: "throwGrenade" }; } });
       }
     }
 
-    return {
-      rubles: s.rubles,
-      dollars: s.dollars,
-      selectedCount: selected.length,
-      inspector,
-      objective: (this.world as any).objectiveText as string | undefined,
-      supply: `${this.world.economy.supplyUsed}/${this.world.economy.supplyCap}`,
-      actions,
-    };
+    return { rubles: s.rubles, dollars: s.dollars, selectedCount: selected.length, inspector, objective: (this.world as any).objectiveText as string | undefined, supply: `${this.world.economy.supplyUsed}/${this.world.economy.supplyCap}`, actions };
   }
 }

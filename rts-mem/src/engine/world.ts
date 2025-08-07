@@ -41,6 +41,8 @@ export type Entity = {
   harvestCooldown?: number;
   // Unit meta
   supplyCost?: number;
+  // Movement diagnostics
+  lastPosX?: number; lastPosY?: number; stuckTime?: number;
 };
 
 export type Economy = { rubles: number; dollars: number; supplyCap: number; supplyUsed: number };
@@ -81,8 +83,9 @@ export class World {
     "pmc-tank": { id: "pmc-tank", label: "Танк", costRubles: 300, costDollars: 150, buildTime: 25, tier: 3, supplyCost: 4 },
   };
 
-  buildingCatalog: Record<string, { id: string; label: string; costRubles: number; costDollars: number; buildTime: number; radius: number; supplyBonus?: number } > = {
+  buildingCatalog: Record<string, { id: string; label: string; costRubles: number; costDollars: number; buildTime: number; radius: number; supplyBonus?: number; incomeKind?: "dollars"; incomePerSec?: number; incomeRadius?: number } > = {
     "stash": { id: "stash", label: "Ячейка схрона", costRubles: 100, costDollars: 0, buildTime: 8, radius: 4, supplyBonus: 8 },
+    "pmc-supply": { id: "pmc-supply", label: "Центр поставок", costRubles: 150, costDollars: 50, buildTime: 12, radius: 5, incomeKind: "dollars", incomePerSec: 4, incomeRadius: 8 },
   };
 
   constructor(width: number, height: number) {
@@ -100,14 +103,12 @@ export class World {
   canPlaceBuilding(typeId: string, pos: Vec2): boolean {
     const t = this.buildingCatalog[typeId]; if (!t) return false;
     const r = t.radius + 1;
-    // Check tiles free
     for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
       const gx = Math.floor(pos.x + x), gy = Math.floor(pos.y + y);
       if ((x * x + y * y) <= r * r) {
         if (!this.nav.inBounds(gx, gy) || !this.nav.isWalkable(gx, gy)) return false;
       }
     }
-    // No overlap with entities
     for (const e of this.entities) {
       const d = Math.hypot(e.pos.x - pos.x, e.pos.y - pos.y);
       if (d < e.radius + t.radius + 1) return false;
@@ -125,7 +126,6 @@ export class World {
       hp: 800, hpMax: 800, tier: 1, buildingType: typeId, underConstruction: true, constructRemaining: t.buildTime, supplyBonus: t.supplyBonus,
     };
     this.entities.push(b);
-    // Reserve tiles immediately
     this.blockTilesForCircle(b.pos, b.radius + 1, true);
     return b;
   }
@@ -148,7 +148,7 @@ export class World {
 
     const pmcBase: Entity = {
       id: NEXT_ID++, name: "Центр поставок", type: "building", faction: "PMС",
-      pos: { x: 96, y: 88 }, radius: 6, hp: 1400, hpMax: 1400, tier: 1, trainQueue: [], garrison: 0,
+      pos: { x: 96, y: 88 }, radius: 5, hp: 1200, hpMax: 1200, tier: 1, trainQueue: [], garrison: 0, buildingType: "pmc-supply", underConstruction: false,
     };
     this.entities.push(pmcBase);
     this.blockTilesForCircle(pmcBase.pos, pmcBase.radius + 1);
@@ -210,7 +210,6 @@ export class World {
   }
 
   issueMoveCommand(ids: number[], target: Vec2) {
-    // Formation offsets in rings
     const offsets: Vec2[] = [];
     const spacing = 2.5;
     const count = ids.length;
@@ -233,11 +232,11 @@ export class World {
       const g = { x: goal.x + Math.floor(offsets[idx].x), y: goal.y + Math.floor(offsets[idx].y) };
       const path = aStar(this.nav, start, g);
       e.path = path; e.pathIndex = 0; e.targetPos = { ...g };
+      e.lastPosX = e.pos.x; e.lastPosY = e.pos.y; e.stuckTime = 0;
     });
   }
 
   getEconomy() {
-    // Compute supply used by alive units of player faction
     let used = 0;
     for (const e of this.entities) if (e.type === "unit" && e.faction === this.playerFaction) used += e.supplyCost ?? 0;
     this.economy.supplyUsed = used;
@@ -283,7 +282,7 @@ export class World {
   }
 
   private harvestAndIncome(dt: number) {
-    // SBEU workers: harvest rubles with carry, return to "Улей"
+    // SBEU workers (rubles carry to Hive)
     for (const e of this.entities) {
       if (e.type === "unit" && e.faction === "SBEU" && e.name.includes("Дикий")) {
         e.harvestCooldown = Math.max(0, (e.harvestCooldown ?? 0) - dt);
@@ -300,15 +299,26 @@ export class World {
             const take = Math.min(2, res.resource!.amount);
             res.resource!.amount -= take; e.carryRubles = (e.carryRubles ?? 0) + take; e.harvestCooldown = 1;
           }
-        } else {
-          // Move to nearest rubles
-          const nearest = this.entities.filter(r => r.type === "resource" && r.resource?.kind === "rubles" && r.resource.amount > 0)
-            .sort((a, b) => dist(e.pos, a.pos) - dist(e.pos, b.pos))[0];
-          if (nearest) this.issueMoveCommand([e.id], nearest.pos);
         }
       }
-      if (e.type === "building" && e.faction === "PMС" && e.name.includes("Центр поставок")) {
-        this.economy.dollars += 3 * dt;
+    }
+
+    // PMC Supply Centers: drain nearest dollar nodes within radius
+    for (const b of this.entities) {
+      if (b.type !== "building" || b.faction !== "PMС" || b.buildingType !== "pmc-supply" || b.underConstruction) continue;
+      const spec = this.buildingCatalog["pmc-supply"];
+      if (!spec.incomeKind || !spec.incomePerSec || !spec.incomeRadius) continue;
+      const nodes = this.entities.filter(r => r.type === "resource" && r.resource?.kind === "dollars" && dist(r.pos, b.pos) <= spec.incomeRadius);
+      if (nodes.length === 0) continue;
+      // Split drain among nodes
+      const totalIncome = spec.incomePerSec * dt;
+      let remaining = totalIncome;
+      for (const n of nodes) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, n.resource!.amount);
+        n.resource!.amount -= take;
+        remaining -= take;
+        this.economy.dollars += take;
       }
     }
   }
@@ -336,42 +346,26 @@ export class World {
     for (const e of this.entities) {
       if (e.type !== "unit" || !e.abilities) continue;
       if ((e.stunnedUntil ?? 0) > this.time) continue;
-      // Keep auto-casts simple: if enemy in range then act
       const enemy = this.entities.find(o => o.faction !== e.faction && o.faction !== "NEUTRAL" && o.hp > 0);
       if (!enemy) continue;
       const d = dist(e.pos, enemy.pos);
-      if (e.abilities.stunGrenade) {
-        const a = e.abilities.stunGrenade; a.cd = Math.max(0, a.cd - dt);
-        if (a.cd === 0 && d <= a.range) { this.effects.push({ kind: "stun", pos: { ...enemy.pos }, fuse: 0.1, radius: a.radius, duration: a.duration }); a.cd = a.cooldown; }
-      }
-      if (e.abilities.aimedShot) {
-        const a = e.abilities.aimedShot; a.cd = Math.max(0, a.cd - dt);
-        if (a.cd === 0 && e.attack && d <= e.attack.range) { enemy.hp -= a.bonusDamage; a.cd = a.cooldown; }
-      }
-      if (e.abilities.throwGrenade) {
-        const a = e.abilities.throwGrenade; a.cd = Math.max(0, a.cd - dt);
-        if (a.cd === 0 && d <= a.range) { this.effects.push({ kind: "explosion", pos: { ...enemy.pos }, fuse: a.fuse, radius: a.radius, damage: a.damage, faction: e.faction }); a.cd = a.cooldown; }
-      }
+      if (e.abilities.stunGrenade) { const a = e.abilities.stunGrenade; a.cd = Math.max(0, a.cd - dt); if (a.cd === 0 && d <= a.range) { this.effects.push({ kind: "stun", pos: { ...enemy.pos }, fuse: 0.1, radius: a.radius, duration: a.duration }); a.cd = a.cooldown; } }
+      if (e.abilities.aimedShot) { const a = e.abilities.aimedShot; a.cd = Math.max(0, a.cd - dt); if (a.cd === 0 && e.attack && d <= e.attack.range) { enemy.hp -= a.bonusDamage; a.cd = a.cooldown; } }
+      if (e.abilities.throwGrenade) { const a = e.abilities.throwGrenade; a.cd = Math.max(0, a.cd - dt); if (a.cd === 0 && d <= a.range) { this.effects.push({ kind: "explosion", pos: { ...enemy.pos }, fuse: a.fuse, radius: a.radius, damage: a.damage, faction: e.faction }); a.cd = a.cooldown; } }
     }
   }
 
   manualCastAbility(casterId: number, kind: keyof NonNullable<Entity["abilities"]>, target: Vec2) {
     const e = this.getEntityById(casterId); if (!e || e.type !== "unit" || !e.abilities) return;
-    if (kind === "stunGrenade" && e.abilities.stunGrenade) {
-      const a = e.abilities.stunGrenade; if (a.cd === 0) { this.effects.push({ kind: "stun", pos: { ...target }, fuse: 0.05, radius: a.radius, duration: a.duration }); a.cd = a.cooldown; }
-    }
-    if (kind === "aimedShot" && e.abilities.aimedShot) {
-      const a = e.abilities.aimedShot; if (a.cd === 0) { const enemy = this.entities.find(o => o.faction !== e.faction && o.faction !== "NEUTRAL" && dist(o.pos, target) < 4); if (enemy) enemy.hp -= a.bonusDamage; a.cd = a.cooldown; }
-    }
-    if (kind === "throwGrenade" && e.abilities.throwGrenade) {
-      const a = e.abilities.throwGrenade; if (a.cd === 0) { this.effects.push({ kind: "explosion", pos: { ...target }, fuse: a.fuse, radius: a.radius, damage: a.damage, faction: e.faction }); a.cd = a.cooldown; }
-    }
+    if (kind === "stunGrenade" && e.abilities.stunGrenade) { const a = e.abilities.stunGrenade; if (a.cd === 0) { this.effects.push({ kind: "stun", pos: { ...target }, fuse: 0.05, radius: a.radius, duration: a.duration }); a.cd = a.cooldown; } }
+    if (kind === "aimedShot" && e.abilities.aimedShot) { const a = e.abilities.aimedShot; if (a.cd === 0) { const enemy = this.entities.find(o => o.faction !== e.faction && o.faction !== "NEUTRAL" && dist(o.pos, target) < 4); if (enemy) enemy.hp -= a.bonusDamage; a.cd = a.cooldown; } }
+    if (kind === "throwGrenade" && e.abilities.throwGrenade) { const a = e.abilities.throwGrenade; if (a.cd === 0) { this.effects.push({ kind: "explosion", pos: { ...target }, fuse: a.fuse, radius: a.radius, damage: a.damage, faction: e.faction }); a.cd = a.cooldown; } }
   }
 
   update(dt: number) {
     this.time += dt;
 
-    // Separation: simple repulsion between allies
+    // Separation
     for (const e of this.entities) {
       if (e.type !== "unit" || !e.moveSpeed) continue;
       let rx = 0, ry = 0; let cnt = 0;
@@ -384,7 +378,7 @@ export class World {
       if (cnt) { const s = 2.0; e.pos.x += (rx / cnt) * s * dt; e.pos.y += (ry / cnt) * s * dt; }
     }
 
-    // Movement along grid path
+    // Movement
     for (const e of this.entities) {
       if (e.type !== "unit" || !e.moveSpeed) continue;
       if ((e.stunnedUntil ?? 0) > this.time) continue;
@@ -395,13 +389,23 @@ export class World {
         const d = Math.hypot(dx, dy);
         if (d < 0.2) e.pathIndex!++;
         else { const nx = dx / (d || 1), ny = dy / (d || 1); e.pos.x += nx * e.moveSpeed * dt; e.pos.y += ny * e.moveSpeed * dt; }
+        // Stuck detection
+        const lpX = e.lastPosX ?? e.pos.x, lpY = e.lastPosY ?? e.pos.y;
+        const moved = Math.hypot(e.pos.x - lpX, e.pos.y - lpY);
+        e.stuckTime = (e.stuckTime ?? 0) + dt;
+        if (moved > 0.3) { e.lastPosX = e.pos.x; e.lastPosY = e.pos.y; e.stuckTime = 0; }
+        else if (e.stuckTime > 1.0 && e.targetPos) {
+          const start = { x: Math.floor(e.pos.x), y: Math.floor(e.pos.y) };
+          const goal = { x: Math.floor(e.targetPos.x), y: Math.floor(e.targetPos.y) };
+          e.path = aStar(this.nav, start, goal); e.pathIndex = 0; e.stuckTime = 0;
+        }
       }
     }
 
     // Abilities
     this.useAbilities(dt);
 
-    // Simple combat
+    // Combat
     for (const e of this.entities) {
       if (!e.attack) continue;
       if ((e.stunnedUntil ?? 0) > this.time) { e.attack.cd = Math.max(0, e.attack.cd - dt); continue; }
@@ -423,25 +427,21 @@ export class World {
     // Effects
     this.updateEffects(dt);
 
-    // Construction progress
+    // Construction
     for (const b of this.entities) {
       if (b.type === "building" && b.underConstruction) {
         b.constructRemaining = Math.max(0, (b.constructRemaining ?? 0) - dt);
-        if (b.constructRemaining === 0) {
-          b.underConstruction = false;
-          if (b.supplyBonus) this.economy.supplyCap += b.supplyBonus;
-        }
+        if (b.constructRemaining === 0) { b.underConstruction = false; if (b.supplyBonus) this.economy.supplyCap += b.supplyBonus; }
       }
     }
 
-    // Cleanup dead
+    // Cleanup
     this.entities = this.entities.filter(e => e.hp > 0 || e.type === "resource");
 
     // Economy
     this.processTraining(dt);
     this.harvestAndIncome(dt);
 
-    // Scenario hooks
     if (this.onUpdateExtra) this.onUpdateExtra(this, dt);
   }
 
@@ -451,10 +451,7 @@ export class World {
     for (let y = 0; y <= this.height; y += 8) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.width, y); ctx.stroke(); }
     for (let x = 0; x <= this.width; x += 8) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.height); ctx.stroke(); }
 
-    for (const fx of this.effects) {
-      if (fx.kind === "explosion") { ctx.strokeStyle = "rgba(239,68,68,0.6)"; ctx.beginPath(); ctx.arc(fx.pos.x, fx.pos.y, fx.radius, 0, Math.PI * 2); ctx.stroke(); }
-      else if (fx.kind === "stun") { ctx.strokeStyle = "rgba(96,165,250,0.6)"; ctx.beginPath(); ctx.arc(fx.pos.x, fx.pos.y, fx.radius, 0, Math.PI * 2); ctx.stroke(); }
-    }
+    for (const fx of this.effects) { if (fx.kind === "explosion") { ctx.strokeStyle = "rgba(239,68,68,0.6)"; ctx.beginPath(); ctx.arc(fx.pos.x, fx.pos.y, fx.radius, 0, Math.PI * 2); ctx.stroke(); } else if (fx.kind === "stun") { ctx.strokeStyle = "rgba(96,165,250,0.6)"; ctx.beginPath(); ctx.arc(fx.pos.x, fx.pos.y, fx.radius, 0, Math.PI * 2); ctx.stroke(); } }
 
     for (const e of this.entities) if (e.type === "resource") { ctx.fillStyle = e.resource!.kind === "rubles" ? "#3b82f6" : "#22c55e"; ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, 2.5, 0, Math.PI * 2); ctx.fill(); }
 
@@ -462,26 +459,19 @@ export class World {
       ctx.fillStyle = e.faction === "SBEU" ? "#9333ea" : "#ef4444";
       ctx.fillRect(e.pos.x - e.radius, e.pos.y - e.radius, e.radius * 2, e.radius * 2);
       if (e.underConstruction) { ctx.fillStyle = "rgba(248,113,113,0.3)"; ctx.fillRect(e.pos.x - e.radius, e.pos.y - e.radius, e.radius * 2, e.radius * 2); }
+      // PMC supply radius indicator
+      if (e.faction === "PMС" && e.buildingType === "pmc-supply") {
+        const spec = this.buildingCatalog["pmc-supply"]; if (spec.incomeRadius) { ctx.strokeStyle = "rgba(34,197,94,0.35)"; ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, spec.incomeRadius, 0, Math.PI * 2); ctx.stroke(); }
+      }
       drawHP(ctx, e);
     }
 
-    for (const e of this.entities) if (e.type === "unit") {
-      const stunned = (e.stunnedUntil ?? 0) > this.time;
-      ctx.fillStyle = e.faction === "SBEU" ? "#a78bfa" : "#f87171";
-      ctx.globalAlpha = stunned ? 0.6 : 1;
-      ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, e.radius, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1; drawHP(ctx, e);
-    }
+    for (const e of this.entities) if (e.type === "unit") { const stunned = (e.stunnedUntil ?? 0) > this.time; ctx.fillStyle = e.faction === "SBEU" ? "#a78bfa" : "#f87171"; ctx.globalAlpha = stunned ? 0.6 : 1; ctx.beginPath(); ctx.arc(e.pos.x, e.pos.y, e.radius, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; drawHP(ctx, e); }
 
     ctx.restore();
   }
 }
 
-function drawHP(ctx: CanvasRenderingContext2D, e: Entity) {
-  const w = 12, h = 2; const x = e.pos.x - w / 2, y = e.pos.y - (e.type === "building" ? e.radius + 4 : e.radius + 6);
-  ctx.fillStyle = "#111827"; ctx.fillRect(x, y, w, h);
-  const p = Math.max(0, Math.min(1, e.hp / e.hpMax));
-  ctx.fillStyle = p > 0.6 ? "#22c55e" : p > 0.3 ? "#eab308" : "#ef4444"; ctx.fillRect(x, y, w * p, h);
-}
+function drawHP(ctx: CanvasRenderingContext2D, e: Entity) { const w = 12, h = 2; const x = e.pos.x - w / 2, y = e.pos.y - (e.type === "building" ? e.radius + 4 : e.radius + 6); ctx.fillStyle = "#111827"; ctx.fillRect(x, y, w, h); const p = Math.max(0, Math.min(1, e.hp / e.hpMax)); ctx.fillStyle = p > 0.6 ? "#22c55e" : p > 0.3 ? "#eab308" : "#ef4444"; ctx.fillRect(x, y, w * p, h); }
 
 function dist(a: Vec2, b: Vec2) { return Math.hypot(a.x - b.x, a.y - b.y); }
